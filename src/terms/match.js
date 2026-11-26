@@ -27,7 +27,13 @@ export function findTerms(matcher, text, { group, subject, maxUnit, exclude, see
   while (i < n.length) {
     const before = pos[i] > 0 ? text[pos[i] - 1] : '';
     if (before && WORDCHAR.test(before)) { i++; continue; }
-    const longest = inScope.find(e => eligible(e) && n.startsWith(e.key, i));
+    // 영문·숫자로 끝나는 용어는 바로 뒤에 영문·숫자가 이어지면 단어의 일부로 본다 (requests 속 re)
+    const endsOk = (e) => {
+      if (!/[a-z0-9]$/.test(e.key)) return true;
+      const after = text[pos[i + e.key.length - 1] + 1] || '';
+      return !/[0-9A-Za-z_]/.test(after);
+    };
+    const longest = inScope.find(e => eligible(e) && n.startsWith(e.key, i) && endsOk(e));
     if (!longest) { i++; continue; }
     if (!(seen && seen.has(longest.termId))) {
       hits.push({ start: pos[i], end: pos[i + longest.key.length - 1] + 1, termId: longest.termId });
