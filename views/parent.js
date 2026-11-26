@@ -1,3 +1,4 @@
+import { SET_SIZES, DEFAULT_SIZE } from '../src/sizes.js';
 import { app, render, go, esc, pct, nowISO, toast, items, conceptName, GROUP_NAME, REVEAL_NAME, ask } from '../app.js';
 import { weeklyReport } from '../src/analysis/report.js';
 import { conceptMastery } from '../src/analysis/mastery.js';
@@ -103,7 +104,7 @@ export async function assign(params) {
       <label class="field">과목<select name="subject">${[...new Set(mine.map(i => i.subject))].map(s => opt(s, s, s === subject)).join('')}</select></label>
       <label class="field">문제집<select name="set">${opt('', '전체', true)}${sets.map(s => opt(s, s)).join('')}</select></label>
       <label class="field">단원<select name="chapter">${opt('', '전체', !chapterNo)}${chapters.map(([n, c]) => opt(n, `${n}장 ${c}`, n === chapterNo)).join('')}</select></label>
-      <label class="field">문항 수<input name="size" type="number" min="1" max="50" value="10"></label>
+      <label class="field">문항 수<select name="size">${SET_SIZES.map(n => opt(n, `${n}문항`, n === DEFAULT_SIZE)).join('')}</select></label>
       <label class="field">마감일<input name="due" type="date" value="${due}"></label>
       <label class="field">정답은 언제 보여줄까요<select name="answer">${revealOpts('after_submit')}</select></label>
       <label class="field">풀이는 언제 열까요<select name="solution">${revealOpts('after_submit')}</select></label>
@@ -126,7 +127,7 @@ export async function assign(params) {
     const rank = ['immediate', 'after_retry', 'after_submit', 'after_due', 'after_parent'];
     if (rank.indexOf(solution) < rank.indexOf(answer)) solution = answer;
     await app.store.saveAssignment({ learnerId: l.id, title: E.title.value, scope, size: ordered.length, dueAt: new Date(E.due.value + 'T23:59:59+09:00').toISOString(), reveal: { answer, solution, retries: 1 }, itemIds: ordered });
-    toast(`${l.nickname}에게 ${ordered.length}문항 과제를 보냈어요.`);
+    toast(`${l.nickname}에게 ${ordered.length}문항 과제를 보냈어요.${ordered.length < +E.size.value ? ' (범위 안 문제가 그만큼이에요)' : ''}`);
     go('#/parent');
   };
 }

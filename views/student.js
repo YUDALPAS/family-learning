@@ -1,3 +1,4 @@
+import { SET_SIZES, DEFAULT_SIZE, shortNote } from '../src/sizes.js';
 import { app, render, go, esc, pct, nowISO, today, publicItems, conceptName, GROUP_NAME, REVEAL_NAME, toast } from '../app.js';
 import { conceptMastery } from '../src/analysis/mastery.js';
 import { reviewDue } from '../src/analysis/review.js';
@@ -68,7 +69,7 @@ export async function setup(params) {
       <label class="field">과목<select name="subject">${subjects.map(s => `<option ${s === subject ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
       <label class="field">문제집<select name="set"><option value="">전체</option>${sets.map(s => `<option>${esc(s)}</option>`).join('')}</select></label>
       <label class="field">단원<select name="chapter"><option value="">전체</option>${chapters.map(([n, c]) => `<option value="${n}">${n}장 ${esc(c)}</option>`).join('')}</select></label>
-      <label class="field">문항 수<select name="size">${[5, 10, 15, 20].map(n => `<option ${n === 10 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="field">문항 수<select name="size">${SET_SIZES.map(n => `<option ${n === DEFAULT_SIZE ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       <fieldset id="revealBox"><legend>정답과 풀이는 언제 볼까요</legend><div class="chips">
         ${radio('reveal', 'immediate', '한 문제씩 바로', true)}${radio('reveal', 'after_retry', '한 번 더 풀어본 뒤', false)}${radio('reveal', 'after_submit', '다 풀고 한꺼번에', false)}
       </div><p class="small muted" id="mockNote" hidden>모의고사는 다 풀고 제출한 뒤에 채점해요.</p></fieldset>
@@ -93,6 +94,7 @@ export async function setup(params) {
       if (m === 'practice') ids = ids.map(id => mine.find(i => i.id === id)).sort((a, b) => a.chapterNo - b.chapterNo || a.no - b.no).map(i => i.id);
     }
     if (!ids.length) return toast('이 범위에는 지금 풀 문제가 없어요. 범위를 넓혀 보세요.');
+    const note = shortNote(size, ids.length); if (note) toast(note);
     const list = ids.map(id => mine.find(i => i.id === id));
     const reveal = m === 'mock' ? 'after_submit' : f.reveal.value;
     startSession(list, {
