@@ -3,6 +3,7 @@ import { conceptMastery } from '../src/analysis/mastery.js';
 import { reviewDue } from '../src/analysis/review.js';
 import { buildSet } from '../src/analysis/recommend.js';
 import { createSession } from '../src/session.js';
+import { termContext } from './terms.js';
 
 const STATUS_NAME = { mastered: '숙달', ok: '보통', weak: '약점', insufficient: '자료 부족' };
 
@@ -111,6 +112,8 @@ export async function notes() {
   const wrong = Object.values(last).filter(a => !a.correct && byId[a.itemId]).reverse();
   const concepts = Object.entries(m).sort((a, b) => (a[1].score ?? 0) - (b[1].score ?? 0));
   const qmap = Object.fromEntries(queue.map(q => [q.itemId, q]));
+  const tc = await termContext();
+  const confusing = tc.terms.filter(t => t.group === me.group && tc.states[t.id]?.confusing);
   const root = render(`
     <h1>오답노트</h1>
     <h2>개념별 숙련도</h2>
@@ -119,6 +122,8 @@ export async function notes() {
       <span class="meta"><span class="tag ${v.status === 'weak' ? 'weak' : ''}">${STATUS_NAME[v.status]}</span> ${v.status === 'insufficient' ? `${v.n}문항` : Math.round(v.score) + '점'}</span></div></li>`).join('')}</ul>
       <p class="small muted">3문항 이상 풀어야 숙련도를 판정해요. 최근 기록과 어려운 문제일수록 더 크게 반영돼요.</p>`
       : `<p class="empty">아직 푼 문제가 없어요. 공부 탭에서 시작해 보세요.</p>`}
+    <h2>헷갈리는 용어 ${confusing.length}개</h2>
+    ${confusing.length ? `<div class="chips">${confusing.map(t => `<button type="button" class="term-chip confusing" data-term="${esc(t.id)}">${esc(t.term)}</button>`).join('')}</div><p class="small muted">여러 번 찾아봤거나 관련 문제를 틀린 용어예요. 누르면 뜻을 다시 볼 수 있어요.</p>` : '<p class="empty">아직 헷갈리는 용어가 없어요.</p>'}
     <h2>틀린 문제 ${wrong.length}개</h2>
     ${wrong.length ? `<ul class="list">${wrong.map(a => { const it = byId[a.itemId]; const q = qmap[a.itemId]; return `<li><a href="#/result?item=${encodeURIComponent(it.id)}"><span style="flex:1"><span class="small muted">${esc(it.subject)} ${it.set} ${it.no}번</span><br>${esc(it.stem.split('\n')[0].slice(0, 60))}</span>
       <span class="meta">${q && !q.graduated ? (q.due <= today() ? '오늘 복습' : esc(q.due.slice(5).replace('-', '/')) + ' 복습') : ''}</span></a></li>`; }).join('')}</ul>` : `<p class="empty">틀린 문제가 없어요.</p>`}`);

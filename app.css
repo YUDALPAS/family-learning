@@ -86,7 +86,7 @@ legend { font-size: 14px; color: var(--pencil); margin-bottom: 6px; padding: 0; 
 .opt.is-answer { border-color: var(--pen); }
 .opt.is-answer .bubble { border-color: var(--pen); color: var(--pen); }
 .opt[aria-pressed="true"].is-answer .bubble { background: var(--pen); color: #fff; }
-.opt:disabled { cursor: default; color: var(--ink); }
+.opt[aria-disabled="true"] { cursor: default; }
 .opt-text { padding-top: 8px; white-space: pre-wrap; }
 .strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 16px; }
 .strip a { display: grid; place-items: center; width: 36px; height: 40px; border: 1.5px solid var(--guide); border-radius: 50%; color: var(--guide); text-decoration: none; font-size: 14px; }
@@ -118,3 +118,23 @@ pre.copy { white-space: pre-wrap; background: #f7f7fa; padding: 12px; border-rad
 .ask { width: min(100%, 520px); background: #fff; border-radius: var(--radius-l); padding: 20px; border-top: 3px solid var(--pen); }
 .ask textarea { width: 100%; min-height: 88px; border: 1.5px solid var(--line); border-radius: var(--radius-s); padding: 10px; font-size: 16px; margin: 4px 0 12px; }
 @media (min-width: 600px) { .ask-wrap { place-items: center; } }
+
+/* 개념 사전 */
+.term-mark { display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 0 1px 0 2px; padding: 0; border: 0; border-radius: 50%; background: var(--guide-tint); color: var(--pen); font-size: 12px; line-height: 1; vertical-align: 2px; cursor: pointer; position: relative; }
+.term-mark::after { content: ""; position: absolute; inset: -11px; }
+.term-mark:focus-visible { outline: 3px solid var(--guide); }
+.term-wrap { position: fixed; inset: 0; z-index: 30; background: rgba(29, 43, 83, .28); display: flex; align-items: flex-end; justify-content: center; }
+.term-sheet { width: min(100%, 600px); max-height: 72vh; overflow-y: auto; background: #fff; border-radius: var(--radius-l) var(--radius-l) 0 0; border-top: 3px solid var(--pen); padding: 14px 18px calc(18px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+.term-top { display: flex; align-items: center; gap: 8px; }
+.term-path { flex: 1; color: var(--pencil); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term-title { margin: 6px 0 2px; font-size: 22px; }
+.term-def { font-size: 17px; }
+.term-easy { margin: 10px 0; }
+.term-fig { margin: 12px 0; overflow-x: auto; }
+.term-fig svg { width: 100%; height: auto; max-height: 260px; touch-action: pinch-zoom; }
+.term-chip { min-height: 40px; padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); font-size: 15px; cursor: pointer; }
+.term-chip.confusing { border-color: var(--pen); color: var(--pen); }
+.key-terms { margin: 10px 0 4px; }
+.key-terms .chips { margin-top: 6px; }
+.dict-search { width: 100%; min-height: 46px; padding: 8px 12px; border: 1.5px solid var(--line); border-radius: var(--radius-s); font-size: 16px; }
+.term-chip-row { width: 100%; background: none; border: 0; text-align: left; cursor: pointer; }

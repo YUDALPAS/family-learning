@@ -6,6 +6,7 @@ import * as auth from './views/auth.js';
 import * as student from './views/student.js';
 import * as solve from './views/solve.js';
 import * as parent from './views/parent.js';
+import * as terms from './views/terms.js';
 
 // ---------- 공용 도구 ----------
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,7 +24,7 @@ export const GROUP_NAME = { knou: '방송대', h1: '고1', e6: '초6' };
 export const REVEAL_NAME = { immediate: '바로', after_retry: '다시 풀어본 뒤', after_submit: '다 풀고 제출한 뒤', after_due: '마감일이 지난 뒤', after_parent: '보호자가 열어준 뒤' };
 
 // ---------- 앱 상태 ----------
-export const app = { store: null, me: null, items: null, flash: null };
+export const app = { store: null, me: null, items: null, flash: null, dict: null, termStates: null };
 
 export async function items(force = false) {
   if (!app.items || force) app.items = await app.store.items({});
@@ -50,6 +51,7 @@ export async function saveResults(attempts, { assignment } = {}) {
     else if (q && !q.graduated) { const nb = nextBox(q.box, true); await app.store.saveReview(me.id, a.itemId, nb.box, dueDate(nb.box, today()), nb.graduated); }
   }
   if (assignment) await app.store.saveAssignment({ ...assignment, status: 'done' });
+  try { await terms.recordAnswers(attempts.filter(a => !a.retry || a.correct)); } catch (e) { console.warn('term events failed', e); }
   try {
     const all = await app.store.attempts(me.id);
     const list = (await publicItems()).filter(i => i.group === me.group);
@@ -77,6 +79,7 @@ const routes = {
   assign: parent.assign,
   upload: parent.upload,
   settings: parent.settings,
+  dict: terms.dictView,
 };
 
 function parseHash() {
@@ -90,7 +93,7 @@ function chrome() {
   if (!me) return;
   $('#who').textContent = `${me.nickname} · ${GROUP_NAME[me.group]}`;
   const { name } = parseHash();
-  const tabs = [['home', '공부'], ['notes', '오답노트']];
+  const tabs = [['home', '공부'], ['notes', '오답노트'], ['dict', '사전']];
   if (me.role === 'parent') tabs.push(['parent', '보호자']);
   $('#tabs').innerHTML = tabs.map(([k, t]) => `<a href="#/${k}" ${name === k ? 'aria-current="page"' : ''}>${t}</a>`).join('');
 }
@@ -102,12 +105,13 @@ export async function route() {
   const view = routes[name] || routes.home;
   if (['parent', 'learner', 'assign', 'upload', 'settings'].includes(name) && app.me?.role !== 'parent') return go('#/home');
   chrome();
+  terms.closeSheet();
   try { await view(params); }
   catch (e) { console.error(e); render(`<h1>문제가 생겼어요</h1><p class="muted">${esc(e.message)}</p><a class="btn" href="#/home">처음으로</a>`); }
 }
 
 async function boot() {
-  let seedItems = [];
+  let seedItems = [], seedTerms = [], seedLinks = [];
   let createClient = null;
   const live = config.supabaseUrl && config.supabaseAnonKey;
   if (live) {
@@ -115,11 +119,14 @@ async function boot() {
     createClient = window.supabase.createClient;
   } else {
     seedItems = await fetch('data/sample-bank.json').then(r => r.ok ? r.json() : []).catch(() => []);
+    const st = await fetch('data/sample-terms.json').then(r => r.ok ? r.json() : null).catch(() => null);
+    if (st) { seedTerms = st.terms; seedLinks = st.links; }
   }
   let storage = null;
   try { storage = window.localStorage; storage.getItem('x'); } catch { const m = new Map(); storage = { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; }
-  app.store = getStore(config, { storage, seedItems, createClient });
-  $('#logout').onclick = async () => { await app.store.signOut(); app.me = null; app.items = null; go('#/login'); };
+  app.store = getStore(config, { storage, seedItems, seedTerms, seedLinks, createClient });
+  $('#logout').onclick = async () => { await app.store.signOut(); app.me = null; app.items = null; app.dict = null; app.termStates = null; terms.closeSheet(); go('#/login'); };
+  terms.wireTermClicks($('#app'));
   window.addEventListener('hashchange', route);
   route();
 }

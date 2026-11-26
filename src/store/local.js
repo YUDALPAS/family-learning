@@ -12,16 +12,18 @@ const deny = (msg = '권한이 없어요') => { throw new Error(msg); };
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
 export class LocalStore {
-  constructor({ storage, seedItems = [] }) {
+  constructor({ storage, seedItems = [], seedTerms = [], seedLinks = [] }) {
     this.storage = storage;
     this.seed = seedItems;
+    this.seedTerms = seedTerms;
+    this.seedLinks = seedLinks;
     this.kind = 'local';
   }
   _db() {
     let raw = null;
     try { raw = this.storage.getItem(KEY); } catch { /* storage unavailable */ }
     const db = raw ? JSON.parse(raw) : {};
-    return { items: [], gradeTerms: {}, statuses: {}, attempts: [], queue: [], assignments: [], reports: [], requests: [], ...db };
+    return { items: [], gradeTerms: {}, statuses: {}, attempts: [], queue: [], assignments: [], reports: [], requests: [], terms: [], termLinks: [], termEvents: [], progress: {}, ...db };
   }
   _save(db) { try { this.storage.setItem(KEY, JSON.stringify(db)); } catch (e) { throw new Error('기기 저장 공간이 부족해요: ' + e.message); } }
   _user() {
@@ -140,6 +142,56 @@ export class LocalStore {
     const db = this._db();
     if (db.requests.some(x => !x.done && x.concept === r.concept && x.learnerId === r.learnerId && x.reason === r.reason)) return;
     db.requests.push({ id: uid(), at: new Date().toISOString(), done: false, ...r });
+    this._save(db);
+  }
+
+  // ---- 개념 사전 ----
+  _allTerms(db) {
+    const map = new Map(this.seedTerms.map(t => [t.id, t]));
+    for (const t of db.terms) map.set(t.id, t);
+    return [...map.values()];
+  }
+  async terms({ group, subject } = {}) {
+    const u = this._user();
+    const g = u.role === 'parent' ? group : u.group;
+    return this._allTerms(this._db()).filter(t => (!g || t.group === g) && (!subject || t.subject === subject));
+  }
+  async termLinks() {
+    this._user();
+    const db = this._db();
+    const own = new Set(db.terms.map(t => t.id));
+    return [...this.seedLinks.filter(l => !own.has(l.from)), ...db.termLinks];
+  }
+  async upsertTerms(terms, links = []) {
+    this._parent();
+    const db = this._db();
+    const have = new Set(this._allTerms(db).map(t => t.id));
+    let inserted = 0, updated = 0;
+    for (const t of terms) {
+      if (have.has(t.id)) updated++; else inserted++;
+      db.terms = db.terms.filter(x => x.id !== t.id);
+      db.terms.push(t);
+    }
+    const ids = new Set(terms.map(t => t.id));
+    db.termLinks = db.termLinks.filter(l => !ids.has(l.from)).concat(links.filter(l => ids.has(l.from)));
+    this._save(db);
+    return { inserted, updated };
+  }
+  async addTermEvents(list) {
+    const u = this._user();
+    if (!list.length) return;
+    const db = this._db();
+    for (const e of list) db.termEvents.push({ ...e, learnerId: u.id });
+    this._save(db);
+  }
+  async termEvents(learnerId) { this._self(learnerId); return this._db().termEvents.filter(e => e.learnerId === learnerId); }
+  async progress(learnerId) { this._self(learnerId); return { ...(this._db().progress[learnerId] || {}) }; }
+  async setProgress(learnerId, subject, unit) {
+    this._parent();
+    const db = this._db();
+    const cur = { ...(db.progress[learnerId] || {}) };
+    if (unit == null) delete cur[subject]; else cur[subject] = unit;
+    db.progress[learnerId] = cur;
     this._save(db);
   }
 }

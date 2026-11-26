@@ -1,15 +1,16 @@
 import { app, render, go, esc, nowISO, toast, saveResults, publicItems, REVEAL_NAME, ask } from '../app.js';
 import { LABELS, renumber } from '../src/session.js';
 import { startSession } from './student.js';
+import { termContext, itemMarks, marked, termChips } from './terms.js';
 
 const CIRCLE = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M33 6c15 0 26 11 25 26-1 14-13 25-27 25C16 57 6 46 7 31 8 17 20 7 36 9"/></svg>';
 const SLASH = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 54L52 8"/></svg>';
 
 // ---------- 빨간펜 해설 (공통) ----------
 // item: 문항, chosen: 고른 보기(원래 번호) 또는 null, label: 원래 번호 → 표시 기호
-export function feedbackHTML(item, chosen, label, { similar = true } = {}) {
+export function feedbackHTML(item, chosen, label, { similar = true, tc = null, marks = null } = {}) {
   const map = Object.fromEntries(item.options.map(o => [o.n, LABELS.indexOf(label(o.n)) + 1]));
-  const rn = (t) => esc(renumber(t, map));
+  const rn = (t) => marked(renumber(t, map), tc, marks);
   const correct = chosen === item.answer;
   const chosenOpt = item.options.find(o => o.n === chosen);
   const ans = item.options.find(o => o.n === item.answer);
@@ -18,10 +19,11 @@ export function feedbackHTML(item, chosen, label, { similar = true } = {}) {
   return `
   <section class="redpen" aria-label="빨간펜 해설">
     <p class="pen">${correct ? '잘했어! 정답이야.' : chosen ? `${label(chosen)}을 골랐구나. 왜 틀렸는지 먼저 보자.` : '이 문제는 답을 고르지 않았어.'}</p>
+    ${tc && marks && marks.all.length ? `<div class="key-terms"><span class="small muted">이 문제의 핵심 용어</span><div class="chips">${termChips(tc, marks.all)}</div></div>` : ''}
     ${!correct && chosen ? `<h3>내가 고른 답 ${label(chosen)}</h3>
       <div class="callout">${why ? rn(why) : `<span class="small muted">자주 하는 실수</span>\n${rn(item.mistakes || '이 보기에 대한 해설은 아직 준비 중이에요.')}`}</div>` : ''}
     <h3>정답 ${label(item.answer)}</h3>
-    <p>${esc(ans?.text)}</p>
+    <p>${rn(ans?.text)}</p>
     <h3>단계별 풀이</h3>
     <ol class="steps" id="steps">${item.steps.map((s, k) => `<li ${k ? 'hidden' : ''}>${rn(s)}</li>`).join('')}</ol>
     ${item.steps.length > 1 ? `<div class="row"><button class="btn ghost" type="button" id="nextStep">다음 단계 보기</button><button class="link" type="button" id="allSteps">모두 펼치기</button></div>` : ''}
@@ -78,15 +80,17 @@ export async function solveView(params) {
   const mark = answerShown ? (st.correct ? 'o' : 'x') : null;
   const strip = deferred ? `<nav class="strip" aria-label="문항 이동">${s.items.map((_, k) => `<a href="#/solve?i=${k}" class="${s.state(k).current != null ? 'done' : ''}" ${k === i ? 'aria-current="true"' : ''}>${k + 1}</a>`).join('')}</nav>` : '';
   const conf = cur.conf ?? 'sure';
+  const tc = await termContext();
+  const mk = itemMarks(tc, item);
   const root = render(`
     <p class="small muted">${esc(cur.ctx.title || '')} · ${i + 1} / ${s.length}${cur.ctx.timer ? ` · <span id="clock"></span>` : ''}</p>
     ${strip}
     <div class="qhead">${markHTML(i + 1, mark, justGraded === i)}<span>${esc(item.subject)} ${esc(item.set)} ${item.no}번 · ${item.chapterNo}장 ${esc(item.chapter)}</span></div>
-    <div class="stem">${esc(v.stem)}</div>
+    <div class="stem">${marked(v.stem, tc, mk)}</div>
     <ul class="omr">${v.options.map(o => {
       const pressed = st.current === o.orig;
       const isAns = answerShown && o.orig === item.answer;
-      return `<li><button type="button" class="opt ${isAns ? 'is-answer' : ''}" aria-pressed="${pressed}" data-label="${o.label}" ${st.done || s.submitted ? 'disabled' : ''}><span class="bubble">${LABELS.indexOf(o.label) + 1}</span><span class="opt-text">${esc(o.text)}</span></button></li>`;
+      return `<li><button type="button" class="opt ${isAns ? 'is-answer' : ''}" aria-pressed="${pressed}" data-label="${o.label}" ${st.done || s.submitted ? 'aria-disabled="true"' : ''}><span class="bubble">${LABELS.indexOf(o.label) + 1}</span><span class="opt-text">${marked(o.text, tc, mk, { inButton: true })}</span></button></li>`;
     }).join('')}</ul>
     ${!st.done && !s.submitted ? `
       <div id="hintBox"></div>
@@ -94,14 +98,15 @@ export async function solveView(params) {
         ${[['sure', '확실해'], ['unsure', '헷갈려'], ['guess', '모르겠어']].map(([k, t]) => `<label class="chip"><input type="radio" name="conf" value="${k}" ${conf === k ? 'checked' : ''}><span>${t}</span></label>`).join('')}
       </div></fieldset>
       <div class="row"><button class="btn" id="confirm" type="button" ${st.current == null ? 'disabled' : ''}>${deferred ? '이 답으로 정하기' : '확정하기'}</button><button class="btn ghost" id="hint" type="button">힌트</button></div>` : ''}
-    <div id="fb">${showFeedback ? feedbackHTML(item, st.current ?? null, (n) => s.labelOf(i, n)) : st.done && !answerShown && !deferred ? '' : ''}</div>
+    <div id="fb">${showFeedback ? feedbackHTML(item, st.current ?? null, (n) => s.labelOf(i, n), { tc, marks: mk }) : st.done && !answerShown && !deferred ? '' : ''}</div>
     <div class="row" style="margin-top:20px">
       ${i > 0 ? `<a class="btn ghost" href="#/solve?i=${i - 1}">이전</a>` : ''}
       ${i < s.length - 1 ? `<a class="btn ghost" href="#/solve?i=${i + 1}" id="next">다음 문제</a>` : ''}
       ${i === s.length - 1 || deferred ? `<button class="btn" id="finish" type="button">${deferred ? '제출하기' : '끝내기'}</button>` : ''}
     </div>`);
 
-  root.querySelectorAll('.opt').forEach(b => b.onclick = () => {
+  root.querySelectorAll('.opt').forEach(b => b.onclick = (e) => {
+    if (e.target.closest('.term-mark') || b.getAttribute('aria-disabled') === 'true') return;
     s.choose(i, b.dataset.label);
     root.querySelectorAll('.opt').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     root.querySelector('#confirm').disabled = false;
@@ -164,12 +169,14 @@ async function singleItem(id) {
   const attempts = (await app.store.attempts(app.me.id)).filter(a => a.itemId === id);
   const last = attempts[attempts.length - 1];
   const label = (n) => LABELS[n - 1];
+  const tc = await termContext();
+  const mk = itemMarks(tc, it);
   const root = render(`
     <p class="small muted">오답노트</p>
     <div class="qhead">${markHTML(it.no, last ? (last.correct ? 'o' : 'x') : null)}<span>${esc(it.subject)} ${esc(it.set)} · ${it.chapterNo}장 ${esc(it.chapter)}</span></div>
-    <div class="stem">${esc(it.stem)}</div>
-    <ul class="omr">${it.options.map(o => `<li><button type="button" class="opt ${o.n === it.answer ? 'is-answer' : ''}" aria-pressed="${last?.finalChoice === o.n}" disabled><span class="bubble">${o.n}</span><span class="opt-text">${esc(o.text)}</span></button></li>`).join('')}</ul>
-    ${feedbackHTML(it, last?.finalChoice ?? null, label)}
+    <div class="stem">${marked(it.stem, tc, mk)}</div>
+    <ul class="omr">${it.options.map(o => `<li><button type="button" class="opt ${o.n === it.answer ? 'is-answer' : ''}" aria-pressed="${last?.finalChoice === o.n}" aria-disabled="true"><span class="bubble">${o.n}</span><span class="opt-text">${marked(o.text, tc, mk, { inButton: true })}</span></button></li>`).join('')}</ul>
+    ${feedbackHTML(it, last?.finalChoice ?? null, label, { tc, marks: mk })}
     <div class="row"><button class="btn" id="again" type="button">다시 풀어보기</button></div>`);
   wireFeedback(root, it);
   root.querySelector('#again').onclick = () => startSession([it], { session: { mode: 'review', reveal: { answer: 'immediate', solution: 'immediate' }, shuffle: true }, ctx: { title: '다시 풀어보기' } });
@@ -202,11 +209,13 @@ export async function assignmentView(params) {
   if (n >= 0 && list[n]) {
     const it = list[n], at = last[it.id];
     const label = (k) => LABELS[k - 1];
+    const tc = await termContext();
+    const mk = itemMarks(tc, it);
     const root = render(`<p class="small muted">${esc(a.title || '과제')} · ${n + 1}/${list.length}</p>
       <div class="qhead">${markHTML(n + 1, ansOk && at ? (at.correct ? 'o' : 'x') : null)}</div>
-      <div class="stem">${esc(it.stem)}</div>
-      <ul class="omr">${it.options.map(o => `<li><button type="button" class="opt ${ansOk && o.n === it.answer ? 'is-answer' : ''}" aria-pressed="${at?.finalChoice === o.n}" disabled><span class="bubble">${o.n}</span><span class="opt-text">${esc(o.text)}</span></button></li>`).join('')}</ul>
-      ${solOk ? feedbackHTML(it, at?.finalChoice ?? null, label) : `<p class="locked">풀이는 ${esc(REVEAL_NAME[a.reveal?.solution])} 열려요.</p>`}
+      <div class="stem">${marked(it.stem, tc, mk)}</div>
+      <ul class="omr">${it.options.map(o => `<li><button type="button" class="opt ${ansOk && o.n === it.answer ? 'is-answer' : ''}" aria-pressed="${at?.finalChoice === o.n}" aria-disabled="true"><span class="bubble">${o.n}</span><span class="opt-text">${marked(o.text, tc, mk, { inButton: true })}</span></button></li>`).join('')}</ul>
+      ${solOk ? feedbackHTML(it, at?.finalChoice ?? null, label, { tc, marks: mk }) : `<p class="locked">풀이는 ${esc(REVEAL_NAME[a.reveal?.solution])} 열려요.</p>`}
       <div class="row" style="margin-top:16px"><a class="btn ghost" href="#/assignment?id=${encodeURIComponent(a.id)}">목록</a></div>`);
     if (solOk) wireFeedback(root, it);
     return;
