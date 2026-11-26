@@ -87,6 +87,16 @@ export class SupabaseStore {
     }
     return { inserted, skipped: items.length - inserted };
   }
+  async updateItems(items) {
+    let updated = 0;
+    for (let i = 0; i < items.length; i += 200) {
+      const chunk = items.slice(i, i + 200);
+      const have = new Set(must(await this.sb.from('items').select('id').in('id', chunk.map(x => x.id))).map(r => r.id));
+      const rows = chunk.filter(x => have.has(x.id)).map(itemToRow);
+      if (rows.length) updated += must(await this.sb.from('items').upsert(rows, { onConflict: 'id' }).select('id')).length;
+    }
+    return { updated, skipped: items.length - updated };
+  }
   async setItemStatus(itemId, status) { must(await this.sb.from('items').update({ status }).eq('id', itemId)); }
   async subjects() {
     const rows = must(await this.sb.rpc('subject_list'));

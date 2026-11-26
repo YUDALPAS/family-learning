@@ -7,6 +7,7 @@ import { parseSolutionBook, metaFromFilename, SUBJECT_CODES } from '../src/parse
 import { parseTermBook, isTermBook } from '../src/terms/parse.js';
 import { termState, TERM_RULES } from '../src/terms/state.js';
 import { loadTerms } from './terms.js';
+import { isWhyBook, parseWhyBook, applyWhys } from '../src/whys/parse.js';
 
 const STATUS_NAME = { mastered: '숙달', ok: '보통', weak: '약점', insufficient: '자료 부족' };
 
@@ -135,23 +136,33 @@ export async function upload() {
   const root = render(`
     <p class="small muted"><a href="#/parent">보호자</a></p>
     <h1>문제 올리기</h1>
-    <p class="muted">풀이서나 개념 사전(docx)을 고르면 내용을 읽어 미리 보여줘요. 같은 풀이서를 다시 올려도 중복되지 않고, 사전은 고친 내용으로 바뀌어요.</p>
+    <p class="muted">풀이서, 개념 사전, 보기해설(docx)을 고르면 내용을 읽어 미리 보여줘요. 같은 풀이서를 다시 올려도 중복되지 않고, 사전과 보기해설은 고친 내용으로 바뀌어요.</p>
     <label class="field">학습자군<select id="grp">${groups.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
-    <label class="field">풀이서·사전 파일<input id="file" type="file" accept=".docx" multiple></label>
+    <label class="field">풀이서·사전·보기해설 파일<input id="file" type="file" accept=".docx" multiple></label>
     <div id="preview"></div>`);
   let parsed = [];
   let book = { terms: [], links: [], warnings: [] };
+  let whys = [];
   root.querySelector('#file').onchange = async (e) => {
     const out = root.querySelector('#preview');
     out.innerHTML = '<p class="muted">읽는 중…</p>';
     parsed = [];
     book = { terms: [], links: [], warnings: [] };
+    whys = [];
     const rows = [];
     for (const file of e.target.files) {
       try {
         const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
         const xml = await zip.file('word/document.xml').async('string');
         const lines = docxXmlToLines(xml, DOMParser);
+        if (isWhyBook(lines)) {
+          const b = parseWhyBook(lines);
+          const r = applyWhys(await items(), b);
+          whys.push(...r.updated);
+          const warn = [...r.warnings, ...(r.missing.length ? [`문항을 찾지 못함: ${r.missing.join(', ')}`] : []), ...(r.mismatched.length ? [`문제 내용이 달라 건너뜀: ${r.mismatched.join(', ')}`] : [])];
+          rows.push({ name: file.name, n: r.updated.length, warnings: warn, why: true, figs: r.updated.filter(u => u.figure).length, meta: { subject: b.subject || '', set: '보기해설' } });
+          continue;
+        }
         if (isTermBook(lines)) {
           const b = parseTermBook(lines, { group: root.querySelector('#grp').value });
           book.terms.push(...b.terms); book.links.push(...b.links); book.warnings.push(...b.warnings);
@@ -166,10 +177,10 @@ export async function upload() {
     }
     const first = parsed[0];
     out.innerHTML = `
-      <table class="simple"><tr><th>파일</th><th>과목·문제집</th><th>문항</th></tr>${rows.map(r => `<tr><td>${esc(r.name)}${r.warnings.length ? `<br><span class="small" style="color:var(--pen)">${r.warnings.slice(0, 3).map(esc).join('<br>')}${r.warnings.length > 3 ? ` 외 ${r.warnings.length - 3}건` : ''}</span>` : ''}</td><td>${r.meta ? `${esc(r.meta.subject)} ${esc(r.meta.set)}` : ''}${r.meta && !SUBJECT_CODES[r.meta.subject] ? '<br><span class="small muted">새 과목</span>' : ''}</td><td>${r.dict ? `용어 ${r.n}개` : r.n}</td></tr>`).join('')}</table>
+      <table class="simple"><tr><th>파일</th><th>과목·문제집</th><th>문항</th></tr>${rows.map(r => `<tr><td>${esc(r.name)}${r.warnings.length ? `<br><span class="small" style="color:var(--pen)">${r.warnings.slice(0, 3).map(esc).join('<br>')}${r.warnings.length > 3 ? ` 외 ${r.warnings.length - 3}건` : ''}</span>` : ''}</td><td>${r.meta ? `${esc(r.meta.subject)} ${esc(r.meta.set)}` : ''}${r.meta && !SUBJECT_CODES[r.meta.subject] ? '<br><span class="small muted">새 과목</span>' : ''}</td><td>${r.dict ? `용어 ${r.n}개` : r.why ? `해설 ${r.n}문항${r.figs ? ` · 그림 ${r.figs}` : ''}` : r.n}</td></tr>`).join('')}</table>
       ${first ? `<h2>첫 문항 미리보기</h2><p class="small muted">${esc(first.subject)} ${esc(first.set)} ${first.no}번 · ${first.chapterNo}장 ${esc(first.chapter)}</p><p style="white-space:pre-wrap">${esc(first.stem)}</p><ol style="list-style:none;padding:0">${first.options.map(o => `<li ${o.n === first.answer ? 'style="color:var(--pen);font-weight:700"' : ''}>${'①②③④'[o.n - 1]} ${esc(o.text)}</li>`).join('')}</ol>` : ''}
       ${book.terms.length ? `<p>개념 사전 <b>용어 ${book.terms.length}개</b>, 연결 ${book.links.length}개${book.terms.filter(t => t.figure).length ? `, 그림 ${book.terms.filter(t => t.figure).length}개` : ''}</p>` : ''}
-      ${parsed.length || book.terms.length ? `<button class="btn wide" id="save" type="button">${[parsed.length ? `${parsed.length}문항` : '', book.terms.length ? `용어 ${book.terms.length}개` : ''].filter(Boolean).join(' · ')} 공개하기</button>` : '<p class="empty">읽은 내용이 없어요. 풀이서나 사전 양식이 맞는지 확인해 주세요.</p>'}`;
+      ${parsed.length || book.terms.length || whys.length ? `<button class="btn wide" id="save" type="button">${[parsed.length ? `${parsed.length}문항` : '', book.terms.length ? `용어 ${book.terms.length}개` : '', whys.length ? `보기해설 ${whys.length}문항` : ''].filter(Boolean).join(' · ')} 공개하기</button>` : '<p class="empty">읽은 내용이 없어요. 풀이서나 사전 양식이 맞는지 확인해 주세요.</p>'}`;
     out.querySelector('#save')?.addEventListener('click', async (ev) => {
       ev.target.disabled = true;
       try {
@@ -178,6 +189,11 @@ export async function upload() {
           const r = await app.store.upsertItems(parsed);
           await items(true);
           msgs.push(`새 문항 ${r.inserted}개${r.skipped ? `(이미 있던 ${r.skipped}개 건너뜀)` : ''}`);
+        }
+        if (whys.length) {
+          const r = await app.store.updateItems(whys);
+          await items(true);
+          msgs.push(`보기해설 ${r.updated}문항`);
         }
         if (book.terms.length) {
           const r = await app.store.upsertTerms(book.terms, book.links);

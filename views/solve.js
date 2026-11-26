@@ -2,6 +2,7 @@ import { app, render, go, esc, nowISO, toast, saveResults, publicItems, REVEAL_N
 import { LABELS, renumber } from '../src/session.js';
 import { startSession } from './student.js';
 import { termContext, itemMarks, marked, termChips } from './terms.js';
+import { sanitizeSvg } from '../src/terms/sanitize.js';
 
 const CIRCLE = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M33 6c15 0 26 11 25 26-1 14-13 25-27 25C16 57 6 46 7 31 8 17 20 7 36 9"/></svg>';
 const SLASH = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 54L52 8"/></svg>';
@@ -27,6 +28,7 @@ export function feedbackHTML(item, chosen, label, { similar = true, tc = null, m
     <h3>단계별 풀이</h3>
     <ol class="steps" id="steps">${item.steps.map((s, k) => `<li ${k ? 'hidden' : ''}>${rn(s)}</li>`).join('')}</ol>
     ${item.steps.length > 1 ? `<div class="row"><button class="btn ghost" type="button" id="nextStep">다음 단계 보기</button><button class="link" type="button" id="allSteps">모두 펼치기</button></div>` : ''}
+    ${item.figure ? (() => { const svg = sanitizeSvg(item.figure, DOMParser, XMLSerializer); return svg ? `<figure class="why-fig" aria-label="풀이 그림">${svg}</figure>` : ''; })() : ''}
     ${others.length ? `<h3>다른 보기는 왜 틀렸을까</h3>${others.map(o => `<p><b>${label(o.n)}</b> ${rn(o.why)}</p>`).join('')}` : ''}
     ${correct && item.mistakes ? `<h3>자주 하는 실수</h3><p>${rn(item.mistakes)}</p>` : ''}
     ${item.tip || item.link ? `<h3>빨간펜 첨삭·팁</h3>${item.tip ? `<p>${rn(item.tip)}</p>` : ''}${item.link ? `<p class="small muted">${rn(item.link)}</p>` : ''}` : ''}

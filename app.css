@@ -132,6 +132,8 @@ pre.copy { white-space: pre-wrap; background: #f7f7fa; padding: 12px; border-rad
 .term-easy { margin: 10px 0; }
 .term-fig { margin: 12px 0; overflow-x: auto; }
 .term-fig svg { width: 100%; height: auto; max-height: 260px; touch-action: pinch-zoom; }
+.why-fig { margin: 10px 0 14px; padding: 8px; border: 1px dashed var(--line, #ccd); border-radius: 8px; overflow-x: auto; }
+.why-fig svg { width: 100%; height: auto; max-height: 280px; }
 .term-chip { min-height: 40px; padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); font-size: 15px; cursor: pointer; }
 .term-chip.confusing { border-color: var(--pen); color: var(--pen); }
 .key-terms { margin: 10px 0 4px; }

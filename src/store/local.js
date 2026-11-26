@@ -38,6 +38,7 @@ export class LocalStore {
   _allItems(db) {
     const map = new Map(this.seed.map(i => [i.id, i]));
     for (const i of db.items) if (!map.has(i.id)) map.set(i.id, i);
+    for (const [id, i] of Object.entries(db.itemEdits || {})) if (map.has(id)) map.set(id, i);
     return [...map.values()].map(i => ({ ...i, status: db.statuses[i.id] ?? i.status ?? 'public' }));
   }
 
@@ -64,6 +65,20 @@ export class LocalStore {
     for (const i of items) { if (have.has(i.id)) { skipped++; continue; } db.items.push(i); have.add(i.id); inserted++; }
     this._save(db);
     return { inserted, skipped };
+  }
+  async updateItems(items) {
+    this._parent();
+    const db = this._db();
+    const have = new Set(this._allItems(db).map(i => i.id));
+    db.itemEdits ||= {};
+    let updated = 0, skipped = 0;
+    for (const i of items) {
+      if (!have.has(i.id)) { skipped++; continue; }
+      const { status, ...rest } = i;
+      db.itemEdits[i.id] = rest; updated++;
+    }
+    this._save(db);
+    return { updated, skipped };
   }
   async setItemStatus(itemId, status) { this._parent(); const db = this._db(); db.statuses[itemId] = status; this._save(db); }
   async subjects() {
