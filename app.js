@@ -38,8 +38,9 @@ export function conceptName(concept, list) {
 }
 
 // 풀이를 마친 뒤: 기록 저장, 복습 상자 갱신, 문항 부족 요청
-export async function saveResults(attempts, { assignment } = {}) {
-  if (!attempts.length && !assignment) return;
+// final: 세트를 끝낼 때만 — 과제 완료 처리, 약점 개념 문항 요청 점검
+export async function saveResults(attempts, { assignment, final = true } = {}) {
+  if (!attempts.length && !assignment && !final) return;
   const me = app.me;
   await app.store.addAttempts(attempts);
   const queue = Object.fromEntries((await app.store.reviewQueue(me.id)).map(q => [q.itemId, q]));
@@ -52,6 +53,7 @@ export async function saveResults(attempts, { assignment } = {}) {
   }
   if (assignment) await app.store.saveAssignment({ ...assignment, status: 'done' });
   try { await terms.recordAnswers(attempts.filter(a => !a.retry || a.correct)); } catch (e) { console.warn('term events failed', e); }
+  if (!final) return;
   try {
     const all = await app.store.attempts(me.id);
     const list = (await publicItems()).filter(i => i.group === me.group);

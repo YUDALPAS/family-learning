@@ -13,6 +13,13 @@ function permutation(n, rng) {
   return a;
 }
 
+// 문제 순서: 단원 연습 '차례대로'는 장·번호 순, '섞기'면 섞고, 그 밖의 모드는 고른 순서 그대로
+export function orderSet(list, { mode, shuffle = false, rng = Math.random } = {}) {
+  if (shuffle) { const p = permutation(list.length, rng); return p.map(k => list[k - 1]); }
+  if (mode === 'practice') return [...list].sort((a, b) => a.chapterNo - b.chapterNo || a.no - b.no);
+  return [...list];
+}
+
 export function createSession({ items, mode = 'practice', reveal = { answer: 'immediate', solution: 'immediate' }, shuffle = false,
   rng = Math.random, dueAt = null, parentReleased = false, learnerId = null, sessionId = null }) {
   const sid = sessionId || `s${Date.now().toString(36)}${Math.floor(rng() * 1e6).toString(36)}`;
@@ -20,6 +27,7 @@ export function createSession({ items, mode = 'practice', reveal = { answer: 'im
   const deferred = DEFERRED.has(reveal.answer);
   let submitted = false, released = parentReleased;
   const recorded = [];
+  const saved = new WeakSet();   // 저장소에 넘긴 기록(같은 기록을 두 번 저장하지 않게)
   const st = items.map((it) => {
     const order = shuffle && !it.noShuffle ? permutation(it.options.length, rng) : it.options.map(o => o.n);
     return { it, order, current: null, first: null, confirmed: false, done: false, correct: null, tries: 0, meta: null };
@@ -93,6 +101,8 @@ export function createSession({ items, mode = 'practice', reveal = { answer: 'im
     canSeeAnswer(i, nowISO) { return visible(reveal.answer, i, nowISO); },
     canSeeSolution(i, nowISO) { return visible(reveal.solution, i, nowISO) && visible(reveal.answer, i, nowISO); },
     attempts() { return recorded.slice(); },
+    takeUnsaved() { const out = recorded.filter(a => !saved.has(a)); out.forEach(a => saved.add(a)); return out; },
+    returnUnsaved(list) { for (const a of list) saved.delete(a); },
     score() { const d = st.filter(s => s.done); return { done: d.length, correct: d.filter(s => s.correct).length, total: st.length }; },
   };
 }

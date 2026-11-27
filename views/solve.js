@@ -83,6 +83,18 @@ document.addEventListener('keydown', (e) => {
   else confirm.click();
 });
 
+// 확정한 기록을 저장소에 넘긴다. 차례로 하나씩(겹치지 않게), 실패하면 기록을 되돌려 다음에 다시 저장.
+function persist(cur, opts = { final: false }) {
+  const s = cur.session;
+  const p = (cur.saving || Promise.resolve()).then(async () => {
+    const batch = s.takeUnsaved();
+    if (!batch.length && !opts.assignment && !opts.final) return;
+    try { await saveResults(batch, opts); } catch (e) { s.returnUnsaved(batch); throw e; }
+  });
+  cur.saving = p.catch(() => {});
+  return p;
+}
+
 // ---------- 문제 풀기 ----------
 export async function solveView(params) {
   const cur = app.current;
@@ -144,6 +156,7 @@ export async function solveView(params) {
     const r = s.confirm(i, { confidence: cur.conf ?? 'sure', hintUsed, ms: Date.now() - t0, at: nowISO() });
     cur.conf = 'sure';
     if (r.graded && !r.retryAllowed) cur.justGraded = i;
+    if (r.graded) persist(cur).catch(() => toast('기록을 아직 저장하지 못했어요. 끝낼 때 다시 저장할게요.'));
     if (!r.graded) return go(i < s.length - 1 ? `#/solve?i=${i + 1}` : `#/solve?i=${i}&t=${Date.now()}`);
     if (r.retryAllowed) { toast('아쉬워! 힌트를 보고 한 번 더 골라 보자.'); return solveView({ i }); }
     solveView({ i });
@@ -154,9 +167,10 @@ export async function solveView(params) {
       const msg = blank ? `아직 안 푼 문제가 ${blank}개 있어요. 제출하면 답을 바꿀 수 없어요.` : '제출하면 답을 바꿀 수 없어요. 제출할까요?';
       if (!(await ask(msg, { ok: '제출하기', cancel: '계속 풀기' }))) return;
     }
+    const btn = root.querySelector('#finish'); btn.disabled = true;
     s.submit(nowISO());
-    try { await saveResults(s.attempts(), { assignment: cur.ctx.assignment }); }
-    catch (e) { return toast('저장하지 못했어요: ' + e.message); }
+    try { await persist(cur, { assignment: cur.ctx.assignment, final: true }); }
+    catch (e) { btn.disabled = false; return toast('저장하지 못했어요: ' + e.message); }
     go('#/result');
   });
   if (showFeedback) wireFeedback(root, item);

@@ -3,7 +3,7 @@ import { app, render, go, esc, pct, nowISO, today, publicItems, conceptName, GRO
 import { conceptMastery } from '../src/analysis/mastery.js';
 import { reviewDue } from '../src/analysis/review.js';
 import { buildSet } from '../src/analysis/recommend.js';
-import { createSession } from '../src/session.js';
+import { createSession, orderSet } from '../src/session.js';
 import { termContext } from './terms.js';
 
 const STATUS_NAME = { mastered: '숙달', ok: '보통', weak: '약점', insufficient: '자료 부족' };
@@ -73,6 +73,7 @@ export async function setup(params) {
       <fieldset id="revealBox"><legend>정답과 풀이는 언제 볼까요</legend><div class="chips">
         ${radio('reveal', 'immediate', '한 문제씩 바로', true)}${radio('reveal', 'after_retry', '한 번 더 풀어본 뒤', false)}${radio('reveal', 'after_submit', '다 풀고 한꺼번에', false)}
       </div><p class="small muted" id="mockNote" hidden>모의고사는 다 풀고 제출한 뒤에 채점해요.</p></fieldset>
+      <fieldset><legend>문제 순서</legend><div class="chips">${radio('qorder', '0', '차례대로', true)}${radio('qorder', '1', '섞기', false)}</div></fieldset>
       <fieldset><legend>보기 순서</legend><div class="chips">${radio('shuffle', '0', '그대로', true)}${radio('shuffle', '1', '섞기', false)}</div></fieldset>
       <button class="btn wide" type="submit">시작하기</button>
     </form>`);
@@ -91,11 +92,10 @@ export async function setup(params) {
     if (m === 'recommend') ids = buildSet({ items: mine, attempts, queue, learner: me, scope: { subject: scope.subject }, size, nowISO: nowISO() });
     else {
       ids = buildSet({ items: mine, attempts, queue: [], learner: me, scope, size: size, nowISO: nowISO() });
-      if (m === 'practice') ids = ids.map(id => mine.find(i => i.id === id)).sort((a, b) => a.chapterNo - b.chapterNo || a.no - b.no).map(i => i.id);
     }
     if (!ids.length) return toast('이 범위에는 지금 풀 문제가 없어요. 범위를 넓혀 보세요.');
     const note = shortNote(size, ids.length); if (note) toast(note);
-    const list = ids.map(id => mine.find(i => i.id === id));
+    const list = orderSet(ids.map(id => mine.find(i => i.id === id)), { mode: m, shuffle: f.qorder.value === '1' });
     const reveal = m === 'mock' ? 'after_submit' : f.reveal.value;
     startSession(list, {
       session: { mode: m, reveal: { answer: reveal, solution: reveal, retries: 1 }, shuffle: f.shuffle.value === '1' },
