@@ -124,7 +124,7 @@ pre.copy { white-space: pre-wrap; background: #f7f7fa; padding: 12px; border-rad
 .term-mark::after { content: ""; position: absolute; inset: -11px; }
 .term-mark:focus-visible { outline: 3px solid var(--guide); }
 .term-faint { display: inline; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline dotted var(--pencil); text-decoration-thickness: 1.5px; text-underline-offset: 4px; cursor: pointer; }
-button.term-faint:focus-visible { outline: 3px solid var(--guide); border-radius: 3px; }
+.term-faint:focus-visible { outline: 3px solid var(--guide); border-radius: 3px; }
 .solve-top { display: flex; align-items: center; gap: 8px; }
 .solve-top p { flex: 1; margin: 0; }
 .dict-btn { flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1.5px solid var(--line); border-radius: 50%; background: #fff; color: var(--pencil); cursor: pointer; }

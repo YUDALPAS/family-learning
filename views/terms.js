@@ -45,7 +45,7 @@ export function itemMarks(tc, item) {
 }
 
 // 문장에 ⚠·흐린 밑줄 넣기 (escape 포함). marks.seen을 같은 문항 안에서 공유한다.
-// ⚠: 진도 안에서 고른 용어. 흐린 밑줄: 그 밖의 사전 용어(진도 밖·4개 초과·익힌 용어). 보기 버튼 안의 밑줄은 누를 수 없다.
+// ⚠: 진도 안에서 고른 용어. 흐린 밑줄: 그 밖의 사전 용어(진도 밖·4개 초과·익힌 용어). 보기 버튼 안에서도 누르면 뜻이 열리고, 카드의 나머지 곳은 답을 고른다.
 export function marked(text, tc, marks, { inButton = false } = {}) {
   if (!text) return '';
   if (!tc || !marks) return esc(text);
@@ -55,7 +55,7 @@ export function marked(text, tc, marks, { inButton = false } = {}) {
     if (typeof s === 'string') return esc(s);
     const name = esc(tc.byId[s.termId]?.term);
     if (s.kind === 'faint') return inButton
-      ? `<span class="term-faint">${esc(s.text)}</span>`
+      ? `<span class="term-faint" role="button" tabindex="0" data-term="${esc(s.termId)}" aria-label="「${name}」 뜻 보기">${esc(s.text)}</span>`
       : `<button type="button" class="term-faint" data-term="${esc(s.termId)}" aria-label="「${name}」 뜻 보기">${esc(s.text)}</button>`;
     return inButton
       ? `<span class="term">${esc(s.text)}<span class="term-mark" role="button" tabindex="0" data-term="${esc(s.termId)}" data-unit="${tc.byId[s.termId]?.unit ?? 0}" aria-label="「${name}」 뜻 보기">⚠</span></span>`
@@ -165,7 +165,7 @@ export function wireTermClicks(root) {
     openSheet(b.dataset.term);
   }, true);
   root.addEventListener('keydown', (e) => {
-    const b = e.target.closest?.('span.term-mark');
+    const b = e.target.closest?.('span.term-mark, span.term-faint[data-term]');
     if (!b || (e.key !== 'Enter' && e.key !== ' ')) return;
     e.preventDefault(); e.stopPropagation();
     openSheet(b.dataset.term);

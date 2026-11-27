@@ -3,6 +3,7 @@ import { LABELS, renumber } from '../src/session.js';
 import { startSession } from './student.js';
 import { termContext, itemMarks, marked, termChips, openSearch } from './terms.js';
 import { sanitizeSvg } from '../src/terms/sanitize.js';
+import { solveKey } from '../src/keys.js';
 
 const CIRCLE = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M33 6c15 0 26 11 25 26-1 14-13 25-27 25C16 57 6 46 7 31 8 17 20 7 36 9"/></svg>';
 const SLASH = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 54L52 8"/></svg>';
@@ -65,6 +66,23 @@ export function wireFeedback(root, item) {
 
 const markHTML = (n, mark, anim = false) => `<span class="qnum${anim ? ' anim' : ''}">${n}${mark === 'o' ? CIRCLE : mark === 'x' ? SLASH : ''}</span>`;
 
+// 숫자키 1~n으로 보기 고르기, Enter로 확정 (풀이 화면에서만, 한 번만 등록)
+document.addEventListener('keydown', (e) => {
+  if (!location.hash.startsWith('#/solve')) return;
+  const opts = [...document.querySelectorAll('main .omr .opt')];
+  if (!opts.length) return;
+  const confirm = document.querySelector('#confirm');
+  const r = solveKey(e, {
+    count: opts.length, locked: opts[0].getAttribute('aria-disabled') === 'true',
+    sheetOpen: !!document.querySelector('.term-wrap'), target: e.target?.closest?.('.opt') ? 'body' : (e.target?.tagName || 'body'),
+    canConfirm: !!confirm && !confirm.disabled,
+  });
+  if (!r) return;
+  e.preventDefault();
+  if (r.choose) opts[r.choose - 1].click();
+  else confirm.click();
+});
+
 // ---------- 문제 풀기 ----------
 export async function solveView(params) {
   const cur = app.current;
@@ -85,7 +103,7 @@ export async function solveView(params) {
   const tc = await termContext();
   const mk = itemMarks(tc, item);
   const root = render(`
-    <div class="solve-top"><p class="small muted">${esc(cur.ctx.title || '')} · ${i + 1} / ${s.length}${cur.ctx.timer ? ` · <span id="clock"></span>` : ''}</p><button type="button" class="dict-btn" id="dictSearch" aria-label="개념 사전에서 찾기" title="개념 사전에서 찾기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></button></div>
+    <div class="solve-top"><p class="small muted">${esc(cur.ctx.title || '')} · ${i + 1} / ${s.length}${cur.ctx.timer ? ` · <span id="clock"></span>` : ''}</p>${st.done ? `<button type="button" class="dict-btn" id="dictSearch" aria-label="개념 사전에서 찾기" title="개념 사전에서 찾기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></button>` : ''}</div>
     ${strip}
     <div class="qhead">${markHTML(i + 1, mark, justGraded === i)}<span>${esc(item.subject)} ${esc(item.set)} ${item.no}번 · ${item.chapterNo}장 ${esc(item.chapter)}</span></div>
     <div class="stem">${marked(v.stem, tc, mk)}</div>
@@ -113,7 +131,7 @@ export async function solveView(params) {
     root.querySelectorAll('.opt').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     root.querySelector('#confirm').disabled = false;
   });
-  root.querySelector('#dictSearch').onclick = () => openSearch(item.subject);
+  root.querySelector('#dictSearch')?.addEventListener('click', () => openSearch(item.subject));
   root.querySelectorAll('[name=conf]').forEach(r => r.onchange = () => { cur.conf = r.value; });
   let hintUsed = false;
   root.querySelector('#hint')?.addEventListener('click', () => {
