@@ -56,3 +56,21 @@ export function segment(text, hits) {
   if (at < text.length) out.push(text.slice(at));
   return out;
 }
+
+// 문장을 표시 조각으로: ⚠(진도 규칙 그대로)를 먼저 찾고, 남은 부분에서만 그 밖의 사전 용어를 'faint'로 찾는다.
+// maxUnit·exclude는 ⚠ 패스에만 쓴다(기존 ⚠ 동작 유지). seen은 문항 전체에서 공유.
+export function markSegments(matcher, text, { group, subject, maxUnit, exclude, allowed = new Set(), seen = new Set() } = {}) {
+  if (!text) return [];
+  const marks = findTerms(matcher, text, { group, subject, maxUnit, exclude, seen: new Set(seen) })
+    .filter(h => allowed.has(h.termId)).map(h => ({ ...h, kind: 'mark' }));
+  for (const h of marks) seen.add(h.termId);
+  const covered = (h) => marks.some(m => h.start < m.end && m.start < h.end);
+  const faint = [];
+  for (const h of findTerms(matcher, text, { group, subject })) {
+    if (covered(h) || seen.has(h.termId)) continue;
+    seen.add(h.termId); faint.push({ ...h, kind: 'faint' });
+  }
+  const hits = [...marks, ...faint].sort((a, b) => a.start - b.start);
+  let k = 0;
+  return segment(text, hits).map(s => typeof s === 'string' ? s : { ...s, kind: hits[k++].kind });
+}

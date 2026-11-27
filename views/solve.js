@@ -1,7 +1,7 @@
 import { app, render, go, esc, nowISO, toast, saveResults, publicItems, REVEAL_NAME, ask } from '../app.js';
 import { LABELS, renumber } from '../src/session.js';
 import { startSession } from './student.js';
-import { termContext, itemMarks, marked, termChips } from './terms.js';
+import { termContext, itemMarks, marked, termChips, openSearch } from './terms.js';
 import { sanitizeSvg } from '../src/terms/sanitize.js';
 
 const CIRCLE = '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M33 6c15 0 26 11 25 26-1 14-13 25-27 25C16 57 6 46 7 31 8 17 20 7 36 9"/></svg>';
@@ -85,7 +85,7 @@ export async function solveView(params) {
   const tc = await termContext();
   const mk = itemMarks(tc, item);
   const root = render(`
-    <p class="small muted">${esc(cur.ctx.title || '')} · ${i + 1} / ${s.length}${cur.ctx.timer ? ` · <span id="clock"></span>` : ''}</p>
+    <div class="solve-top"><p class="small muted">${esc(cur.ctx.title || '')} · ${i + 1} / ${s.length}${cur.ctx.timer ? ` · <span id="clock"></span>` : ''}</p><button type="button" class="dict-btn" id="dictSearch" aria-label="개념 사전에서 찾기" title="개념 사전에서 찾기"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></button></div>
     ${strip}
     <div class="qhead">${markHTML(i + 1, mark, justGraded === i)}<span>${esc(item.subject)} ${esc(item.set)} ${item.no}번 · ${item.chapterNo}장 ${esc(item.chapter)}</span></div>
     <div class="stem">${marked(v.stem, tc, mk)}</div>
@@ -113,6 +113,7 @@ export async function solveView(params) {
     root.querySelectorAll('.opt').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     root.querySelector('#confirm').disabled = false;
   });
+  root.querySelector('#dictSearch').onclick = () => openSearch(item.subject);
   root.querySelectorAll('[name=conf]').forEach(r => r.onchange = () => { cur.conf = r.value; });
   let hintUsed = false;
   root.querySelector('#hint')?.addEventListener('click', () => {

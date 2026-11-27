@@ -1,6 +1,7 @@
 // 개념 사전 화면 조각: ⚠ 표시, 용어 시트, 사전 탭
 import { app, render, esc, nowISO, toast } from '../app.js';
-import { buildMatcher, findTerms, segment } from '../src/terms/match.js';
+import { buildMatcher, markSegments } from '../src/terms/match.js';
+import { searchTerms } from '../src/terms/search.js';
 import { termState, termsInItem, pickMarks, TERM_RULES } from '../src/terms/state.js';
 import { sanitizeSvg } from '../src/terms/sanitize.js';
 
@@ -43,16 +44,23 @@ export function itemMarks(tc, item) {
   return { ctx, all, allowed, seen: new Set() };
 }
 
-// 문장에 ⚠ 넣기 (escape 포함). marks.seen을 같은 문항 안에서 공유한다.
+// 문장에 ⚠·흐린 밑줄 넣기 (escape 포함). marks.seen을 같은 문항 안에서 공유한다.
+// ⚠: 진도 안에서 고른 용어. 흐린 밑줄: 그 밖의 사전 용어(진도 밖·4개 초과·익힌 용어). 보기 버튼 안의 밑줄은 누를 수 없다.
 export function marked(text, tc, marks, { inButton = false } = {}) {
   if (!text) return '';
   if (!tc || !marks) return esc(text);
   const exclude = new Set(marks.all.filter(id => !marks.allowed.has(id)));
-  const hits = findTerms(tc.matcher, text, { ...marks.ctx, exclude, seen: marks.seen });
-  return segment(text, hits).map(s => typeof s === 'string' ? esc(s)
-    : inButton
-      ? `<span class="term">${esc(s.text)}<span class="term-mark" role="button" tabindex="0" data-term="${esc(s.termId)}" data-unit="${tc.byId[s.termId]?.unit ?? 0}" aria-label="「${esc(tc.byId[s.termId]?.term)}」 뜻 보기">⚠</span></span>`
-      : `<span class="term">${esc(s.text)}<button type="button" class="term-mark" data-term="${esc(s.termId)}" data-unit="${tc.byId[s.termId]?.unit ?? 0}" aria-label="「${esc(tc.byId[s.termId]?.term)}」 뜻 보기">⚠</button></span>`).join('');
+  const segs = markSegments(tc.matcher, text, { ...marks.ctx, exclude, allowed: marks.allowed, seen: marks.seen });
+  return segs.map(s => {
+    if (typeof s === 'string') return esc(s);
+    const name = esc(tc.byId[s.termId]?.term);
+    if (s.kind === 'faint') return inButton
+      ? `<span class="term-faint">${esc(s.text)}</span>`
+      : `<button type="button" class="term-faint" data-term="${esc(s.termId)}" aria-label="「${name}」 뜻 보기">${esc(s.text)}</button>`;
+    return inButton
+      ? `<span class="term">${esc(s.text)}<span class="term-mark" role="button" tabindex="0" data-term="${esc(s.termId)}" data-unit="${tc.byId[s.termId]?.unit ?? 0}" aria-label="「${name}」 뜻 보기">⚠</span></span>`
+      : `<span class="term">${esc(s.text)}<button type="button" class="term-mark" data-term="${esc(s.termId)}" data-unit="${tc.byId[s.termId]?.unit ?? 0}" aria-label="「${name}」 뜻 보기">⚠</button></span>`;
+  }).join('');
 }
 
 export function termChips(tc, ids, limit = 6) {
@@ -64,18 +72,11 @@ export function termChips(tc, ids, limit = 6) {
 let sheet = null;
 const LINK_NAME = { confusing: '헷갈리는 짝', prereq: '먼저 알면 좋은 말', related: '관련 용어' };
 
-export async function openSheet(termId, path = []) {
+export async function openSheet(termId, path = [], { backToSearch = null } = {}) {
   const tc = await loadTerms();
   const t = tc.byId[termId];
   if (!t) return;
-  if (!sheet) {
-    sheet = document.createElement('div');
-    sheet.className = 'term-wrap';
-    sheet.innerHTML = '<section class="term-sheet" role="dialog" aria-modal="true" aria-labelledby="term-title"></section>';
-    sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
-    document.addEventListener('keydown', onKey);
-    document.body.append(sheet);
-  }
+  ensureSheet();
   const trail = [...path, termId];
   const links = tc.links.filter(l => l.from === termId && tc.byId[l.to]);
   const group = (type) => links.filter(l => l.type === type).map(l => l.to);
@@ -83,7 +84,7 @@ export async function openSheet(termId, path = []) {
   const box = sheet.querySelector('.term-sheet');
   box.innerHTML = `
     <div class="term-top">
-      ${path.length ? `<button type="button" class="link term-back" aria-label="이전 용어로">‹ 뒤로</button>` : ''}
+      ${path.length || backToSearch ? `<button type="button" class="link term-back" aria-label="${path.length ? '이전 용어로' : '검색 결과로'}">‹ 뒤로</button>` : ''}
       <span class="term-path">${trail.map(id => esc(tc.byId[id]?.term)).join(' › ')}</span>
       <button type="button" class="link term-close">닫기</button>
     </div>
@@ -97,8 +98,8 @@ export async function openSheet(termId, path = []) {
     ${t.source ? `<p class="small muted" style="margin-top:14px">출처: ${esc(t.source)}</p>` : ''}`;
   box.scrollTop = 0;
   box.querySelector('.term-close').onclick = closeSheet;
-  box.querySelector('.term-back')?.addEventListener('click', () => openSheet(path[path.length - 1], path.slice(0, -1)));
-  box.querySelectorAll('.term-chip').forEach(b => b.onclick = () => openSheet(b.dataset.term, trail));
+  box.querySelector('.term-back')?.addEventListener('click', () => path.length ? openSheet(path[path.length - 1], path.slice(0, -1), { backToSearch }) : openSearch(backToSearch.subject, backToSearch.query));
+  box.querySelectorAll('.term-chip').forEach(b => b.onclick = () => openSheet(b.dataset.term, trail, { backToSearch }));
   box.querySelector('.term-fig-btn')?.addEventListener('click', (e) => {
     const fig = box.querySelector('.term-fig');
     const svg = sanitizeSvg(t.figure, DOMParser, XMLSerializer);
@@ -111,6 +112,43 @@ export async function openSheet(termId, path = []) {
   }
 }
 
+function ensureSheet() {
+  if (sheet) return;
+  sheet = document.createElement('div');
+  sheet.className = 'term-wrap';
+  sheet.innerHTML = '<section class="term-sheet" role="dialog" aria-modal="true" aria-labelledby="term-title"></section>';
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+  document.addEventListener('keydown', onKey);
+  document.body.append(sheet);
+}
+
+// ---------- 문제 화면의 돋보기: 사전 검색 시트 ----------
+export async function openSearch(subject, query = '') {
+  const tc = await loadTerms();
+  ensureSheet();
+  const box = sheet.querySelector('.term-sheet');
+  box.innerHTML = `
+    <div class="term-top"><span class="term-path" id="term-title">개념 사전 찾기</span><button type="button" class="link term-close">닫기</button></div>
+    <input class="dict-search" type="search" placeholder="용어 찾기 (예: 힙)" aria-label="용어 찾기" style="margin-top:8px">
+    <ul class="list dict-list" style="margin-top:10px" aria-live="polite"></ul>`;
+  const input = box.querySelector('.dict-search');
+  const listEl = box.querySelector('.dict-list');
+  input.value = query;
+  const draw = () => {
+    const q = input.value;
+    const list = searchTerms(tc.terms, q, { group: app.me?.group, subject });
+    listEl.innerHTML = !q.trim() ? '<li class="empty">용어를 입력해 보세요</li>'
+      : !list.length ? '<li class="empty">사전에 없는 용어예요</li>'
+      : list.map(t => `<li><button type="button" class="item term-chip-row" data-result="${esc(t.id)}"><span style="flex:1;text-align:left"><b>${esc(t.term)}</b><br><span class="small muted">${esc(t.definition.slice(0, 40))}${t.definition.length > 40 ? '…' : ''}</span></span><span class="meta">${t.subject === subject ? '' : esc(t.subject) + ' '}${t.unit}장</span></button></li>`).join('');
+    listEl.querySelectorAll('[data-result]').forEach(b => b.onclick = () => openSheet(b.dataset.result, [], { backToSearch: { subject, query: input.value } }));
+  };
+  input.addEventListener('input', draw);
+  box.querySelector('.term-close').onclick = closeSheet;
+  draw();
+  box.scrollTop = 0;
+  input.focus();
+}
+
 function onKey(e) { if (e.key === 'Escape') closeSheet(); }
 export function closeSheet() {
   if (!sheet) return;
@@ -121,7 +159,7 @@ export function closeSheet() {
 // 화면 어디서든 ⚠·용어 칩을 누르면 시트를 연다
 export function wireTermClicks(root) {
   root.addEventListener('click', (e) => {
-    const b = e.target.closest('.term-mark, .term-chip');
+    const b = e.target.closest('.term-mark, .term-chip, .term-faint[data-term]');
     if (!b || b.closest('.term-sheet')) return;
     e.preventDefault(); e.stopPropagation();
     openSheet(b.dataset.term);
